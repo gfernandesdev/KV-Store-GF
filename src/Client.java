@@ -133,7 +133,7 @@ public class Client {
 
             System.out.println("Response: " + responseMessage.getResponse());
 
-            // Close the connections
+            /// Close the connections
             out.close();
             in.close();
             socket.close();
