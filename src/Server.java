@@ -17,9 +17,9 @@ public class Server {
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        System.out.print("Enter Server IP: ");
+        System.out.print("Digite o IP do Server: ");
         String serverIP = scanner.nextLine();
-        System.out.print("Enter Server Port: ");
+        System.out.print("Digite a porta do Server: ");
         int serverPort = scanner.nextInt();
         scanner.nextLine(); // Limpa o buffer
 
@@ -33,16 +33,16 @@ public class Server {
         this.serverIP = serverIP;
         this.serverPort = serverPort;
         this.servers = servers;
+
+        // Verifica se é o líder
         if (serverPort == 10097) {
             isLeader = true;
-            System.out.println("This server is the leader");
         }
     }
 
     private void start() {
         try {
             ServerSocket serverSocket = new ServerSocket(serverPort);
-            System.out.println("Server started on " + serverIP + ":" + serverPort);
 
             // Criar um ThreadPoolExecutor com um número adequado de threads
             int numThreads = 5; // Defina o número de threads que deseja (ajuste conforme necessário)
@@ -50,7 +50,6 @@ public class Server {
 
             while (true) {
                 Socket clientSocket = serverSocket.accept();
-                System.out.println("Client connected: " + clientSocket.getInetAddress().getHostAddress());
 
                 ClientHandler clientHandler = new ClientHandler(clientSocket, this);
                 executorService.execute(clientHandler);
@@ -89,7 +88,7 @@ public class Server {
 
                 while ((requestMessage = readMessage()) != null) {
                     if (requestMessage.comando == null) {
-                        System.out.println("Received a null message from the client.");
+                        System.out.println("Mensagem vazia (NULL).");
                         continue; // Ignore this message and continue listening for the next one.
                     }
 
@@ -105,7 +104,7 @@ public class Server {
                             response = "PUT_OK key: " + key + " value:" + value + " realizada no servidor " + server.serverIP + ":" + server.serverPort;
                             replicateData(key, value);
                         } else {
-                            System.out.println("Servidor " + server.serverIP + ":" + server.serverPort + " encaminhando PUT key:" + key + " value:" + value);
+                            System.out.println("Encaminhando PUT key:" + key + " value:" + value);
                             String leaderResponse = forwardPutToLeader(key, value);
                             response = "PUT_OK key: " + key + " value:" + value + " encaminhado para o líder. Resposta do líder: " + leaderResponse;
                         }
@@ -113,11 +112,13 @@ public class Server {
                         String key = requestMessage.key;
                         String value = get(key);
                         response = (value != null) ? "GET key: " + key + " value: " + value + " obtido do servidor " + server.serverIP + ":" + server.serverPort : "Key not found";
+                        System.out.println("Cliente " + clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort() + " GET key:"+key+" ts:[timestamp]. Meu ts é [timestamp_da_key], portanto devolvendo [valor ou erro]");
                     } else if (requestMessage.comando.equals("REPLICATE")) {
                         String key = requestMessage.key;
                         String value = requestMessage.value;
                         put(key, value);
                         response = "REPLICATION_OK";
+                        System.out.println("REPLICATION_OK");
                     } else {
                         response = "Invalid command";
                     }
@@ -175,10 +176,6 @@ public class Server {
                         ObjectInputStream replicateIn = new ObjectInputStream(replicateSocket.getInputStream());
                         Mensagem replicateResponse = (Mensagem) replicateIn.readObject();
 
-                        if ("REPLICATION_OK".equals(replicateResponse.response)) {
-                            System.out.println("Replication successful on server " + serverIPs[i] + ":" + serverPorts[i]);
-                        }
-
                         replicateOut.close();
                         replicateIn.close();
                         replicateSocket.close();
@@ -186,8 +183,11 @@ public class Server {
                         System.err.println("Error replicating data to server " + serverIPs[i] + ":" + serverPorts[i]);
                         e.printStackTrace();
                     }
+                } else {
+
                 }
             }
+            System.out.println("Enviando PUT_OK ao Cliente " + clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort() + " da key:"+ key +" ts:[timestamp_do_servidor]");
         }
 
         private String forwardPutToLeader(String key, String value) {
@@ -198,7 +198,6 @@ public class Server {
                 ObjectOutputStream leaderOut = new ObjectOutputStream(leaderSocket.getOutputStream());
 
 
-                System.out.println("key: " + key + ", value: " + value);
                 Mensagem requestMessage = new Mensagem("PUT", key, value);
                 leaderOut.writeObject(requestMessage);
                 leaderOut.flush(); // Certifica-se de que os dados são enviados imediatamente

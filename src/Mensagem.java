@@ -5,6 +5,7 @@ public class Mensagem implements Serializable {
     String key;
     String value;
     String response;
+    long timestamp;
 
     public Mensagem(String comando, String key, String value) {
         this.comando = comando;

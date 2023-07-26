@@ -18,26 +18,23 @@ public class Client {
         Scanner scanner = new Scanner(System.in);
 
         while (true) {
-            System.out.println("Options:\n1. PUT\n2. GET\n3. INIT\n4. EXIT");
-            System.out.print("Enter option: ");
+            System.out.println("KV-STORE-GF:\n1. INIT\n2. PUT\n3. GET");
+            System.out.print("Digite a opção: ");
             int option = scanner.nextInt();
             scanner.nextLine(); // Limpa o buffer
 
             switch (option) {
-                case 1: // PUT
-                    handlePutRequest(scanner);
-                    break;
-                case 2: // GET
-                    handleGetRequest(scanner);
-                    break;
-                case 3: // INIT
+                case 1: // INIT
                     handleInitRequest(scanner);
                     break;
-                case 4: // EXIT
-                    scanner.close();
-                    return;
+                case 2: // PUT
+                    handlePutRequest(scanner);
+                    break;
+                case 3: // GET
+                    handleGetRequest(scanner);
+                    break;
                 default:
-                    System.out.println("Invalid option");
+                    System.out.println("Opção Inválida");
                     break;
             }
         }
@@ -45,7 +42,7 @@ public class Client {
 
     private void handlePutRequest(Scanner scanner) {
         if (servers.isEmpty()) {
-            System.out.println("Please initialize the servers first using INIT option.");
+            System.out.println("Escolha INIT primeiro.");
             return;
         }
 
@@ -63,15 +60,12 @@ public class Client {
                  ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                  ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
 
-                System.out.print("Enter key: ");
+                System.out.print("Digite a key: ");
                 String key = scanner.nextLine();
-                System.out.print("Enter value: ");
+                System.out.print("Digite o value: ");
                 String value = scanner.nextLine();
 
-                System.out.println("key: " + key + ", value: " + value);
-
                 Mensagem requestMessage = new Mensagem("PUT", key, value);
-                System.out.println(requestMessage);
                 out.writeObject(requestMessage);
 
                 Mensagem responseMessage = (Mensagem) in.readObject();
@@ -85,7 +79,7 @@ public class Client {
 
     private void handleGetRequest(Scanner scanner) {
         if (servers.isEmpty()) {
-            System.out.println("Please initialize the servers first using INIT option.");
+            System.out.println("Escolha INIT primeiro.");
             return;
         }
 
@@ -99,7 +93,7 @@ public class Client {
             Socket socket = new Socket(serverIP, serverPort);
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
 
-            System.out.print("Enter key: ");
+            System.out.print("Digite a key: ");
             String key = scanner.nextLine();
 
             Mensagem requestMessage = new Mensagem("GET", key);
@@ -120,18 +114,17 @@ public class Client {
     private void handleInitRequest(Scanner scanner) {
         try {
             for (int i = 1; i <= 3; i++) {
-                System.out.print("Enter Server " + i + " IP: ");
+                System.out.print("Digite o IP do Server " + i + ": ");
                 String serverIP = scanner.nextLine();
-                System.out.print("Enter Server " + i + " Port: ");
+                System.out.print("Digite a porta do Server " + i + ": ");
                 int serverPort = scanner.nextInt();
                 scanner.nextLine(); // Limpa o buffer
 
                 servers.put(i, serverIP + ":" + serverPort);
             }
 
-            System.out.println("Servers initialized successfully.");
         } catch (Exception e) {
-            System.out.println("Invalid input format. Please try again.");
+            System.out.println("Digite em um formato válido, tente novamente.");
         }
     }
 }
