@@ -1,11 +1,10 @@
 import java.io.Serializable;
 //
 public class Mensagem implements Serializable {
-    private static final long serialVersionUID = 1L;
-    private String comando;
-    private String key;
-    private String value;
-    private String response;
+    String comando;
+    String key;
+    String value;
+    String response;
 
     public Mensagem(String comando, String key, String value) {
         this.comando = comando;
@@ -13,25 +12,23 @@ public class Mensagem implements Serializable {
         this.value = value;
     }
 
+    public Mensagem(String comando, String key) {
+        this.comando = comando;
+        this.key = key;
+    }
+
     public Mensagem(String response) {
         this.response = response;
     }
 
-    public String getComando() {
-        return comando;
-    }
-
-    public String getKey() {
-        return key;
-    }
-
-    public String getValue() {
-        return value;
-    }
-
-    public String getResponse() {
-        return response;
+    @Override
+    public String toString() {
+        // Retorna uma representação personalizada da mensagem
+        // Neste exemplo, estou retornando a string formatada com comando, key e value
+        return "Mensagem{" +
+                "comando='" + comando + '\'' +
+                ", key='" + key + '\'' +
+                ", value='" + value + '\'' +
+                '}';
     }
 }
-
-

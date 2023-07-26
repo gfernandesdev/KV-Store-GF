@@ -3,7 +3,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Random;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -16,84 +15,33 @@ public class Server {
 
     private Map<String, String> keyValueStore = new HashMap<>();
 
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter Server IP: ");
+        String serverIP = scanner.nextLine();
+        System.out.print("Enter Server Port: ");
+        int serverPort = scanner.nextInt();
+        scanner.nextLine(); // Limpa o buffer
+
+        Server server = new Server(serverIP, serverPort, null);
+        server.start();
+
+        scanner.close();
+    }
+
     public Server(String serverIP, int serverPort, Server[] servers) {
         this.serverIP = serverIP;
         this.serverPort = serverPort;
         this.servers = servers;
-    }
-
-    public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-
-        System.out.print("Enter Server 1 IP: ");
-        String server1IP = scanner.nextLine();
-        System.out.print("Enter Server 1 Port: ");
-        int server1Port = scanner.nextInt();
-
-        System.out.print("Enter Server 2 IP: ");
-        String server2IP = scanner.next();
-        System.out.print("Enter Server 2 Port: ");
-        int server2Port = scanner.nextInt();
-
-        System.out.print("Enter Server 3 IP: ");
-        String server3IP = scanner.next();
-        System.out.print("Enter Server 3 Port: ");
-        int server3Port = scanner.nextInt();
-
-        Server[] servers = {
-                new Server(server1IP, server1Port, null),
-                new Server(server2IP, server2Port, null),
-                new Server(server3IP, server3Port, null)
-        };
-
-        // Configurar o array de servidores para cada instância
-        servers[0].servers = servers;
-        servers[1].servers = servers;
-        servers[2].servers = servers;
-
-        System.out.print("Select the leader server (1-3): ");
-        int leaderIndex = scanner.nextInt();
-        leaderIndex--; // Adjusting to zero-based indexing
-
-        // Criar um array de ServerSocket para os três servidores
-        ServerSocket[] serverSockets = new ServerSocket[3];
-
-        try {
-            for (int i = 0; i < servers.length; i++) {
-                if (i == leaderIndex) {
-                    servers[i].setLeader();
-                }
-                serverSockets[i] = new ServerSocket(servers[i].serverPort);
-                System.out.println("Server " + (i + 1) + " started on " + servers[i].serverIP + ":" + servers[i].serverPort);
-            }
-
-            // Criar um array de ExecutorService para os três servidores
-            ExecutorService[] executorServices = new ExecutorService[3];
-
-            int numThreads = 5; // Defina o número de threads que deseja (ajuste conforme necessário)
-            for (int i = 0; i < servers.length; i++) {
-                executorServices[i] = Executors.newFixedThreadPool(numThreads);
-                int finalI = i;
-                executorServices[i].execute(() -> servers[finalI].start(serverSockets[finalI]));
-            }
-
-            // Esperar que os servidores terminem suas tarefas
-            for (ExecutorService executorService : executorServices) {
-                executorService.shutdown();
-            }
-
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (serverPort == 10097) {
+            isLeader = true;
+            System.out.println("This server is the leader");
         }
     }
 
-    public void setLeader() {
-        isLeader = true;
-        System.out.println("This server is the leader");
-    }
-
-    private void start(ServerSocket serverSocket) {
+    private void start() {
         try {
+            ServerSocket serverSocket = new ServerSocket(serverPort);
             System.out.println("Server started on " + serverIP + ":" + serverPort);
 
             // Criar um ThreadPoolExecutor com um número adequado de threads
@@ -102,7 +50,6 @@ public class Server {
 
             while (true) {
                 Socket clientSocket = serverSocket.accept();
-                System.out.println(numThreads);
                 System.out.println("Client connected: " + clientSocket.getInetAddress().getHostAddress());
 
                 ClientHandler clientHandler = new ClientHandler(clientSocket, this);
@@ -135,18 +82,22 @@ public class Server {
         @Override
         public void run() {
             try {
-                in = new ObjectInputStream(clientSocket.getInputStream());
-                out = new ObjectOutputStream(clientSocket.getOutputStream());
+                 in = new ObjectInputStream(clientSocket.getInputStream());
+                 out = new ObjectOutputStream(clientSocket.getOutputStream());
 
                 Mensagem requestMessage;
 
                 while ((requestMessage = readMessage()) != null) {
-                    String[] command = requestMessage.getComando().split(":");
+                    if (requestMessage.comando == null) {
+                        System.out.println("Received a null message from the client.");
+                        continue; // Ignore this message and continue listening for the next one.
+                    }
+
                     String response;
 
-                    if (command[0].equals("PUT")) {
-                        String key = requestMessage.getKey();
-                        String value = requestMessage.getValue();
+                    if (requestMessage.comando.equals("PUT")) {
+                        String key = requestMessage.key;
+                        String value = requestMessage.value;
 
                         if (server.isLeader) {
                             System.out.println("Cliente " + clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort() + " PUT key:" + key + " value:" + value);
@@ -154,17 +105,17 @@ public class Server {
                             response = "PUT_OK key: " + key + " value:" + value + " realizada no servidor " + server.serverIP + ":" + server.serverPort;
                             replicateData(key, value);
                         } else {
-                            System.out.println("Encaminhando PUT key:" + key + " value:" + value);
+                            System.out.println("Servidor " + server.serverIP + ":" + server.serverPort + " encaminhando PUT key:" + key + " value:" + value);
                             String leaderResponse = forwardPutToLeader(key, value);
-                            response = "Forwarded PUT to leader. Response: " + leaderResponse;
+                            response = "PUT_OK key: " + key + " value:" + value + " encaminhado para o líder. Resposta do líder: " + leaderResponse;
                         }
-                    } else if (command[0].equals("GET")) {
-                        String key = requestMessage.getKey();
+                    } else if (requestMessage.comando.equals("GET")) {
+                        String key = requestMessage.key;
                         String value = get(key);
                         response = (value != null) ? "GET key: " + key + " value: " + value + " obtido do servidor " + server.serverIP + ":" + server.serverPort : "Key not found";
-                    } else if (command[0].equals("REPLICATE")) {
-                        String key = requestMessage.getKey();
-                        String value = requestMessage.getValue();
+                    } else if (requestMessage.comando.equals("REPLICATE")) {
+                        String key = requestMessage.key;
+                        String value = requestMessage.value;
                         put(key, value);
                         response = "REPLICATION_OK";
                     } else {
@@ -174,18 +125,19 @@ public class Server {
                     // Create a Message object for the response
                     Mensagem responseMessage = new Mensagem(response);
 
-                    if (response.equals("Forwarded PUT to leader. Response: REPLICATION_OK")) {
+                    if (response.equals("PUT_OK key: " + requestMessage.key + " value:" + requestMessage.value + " encaminhado para o líder. Resposta do líder: REPLICATION_OK")) {
                         // Send an empty response to the client after forwarding the PUT request
                         responseMessage = new Mensagem("");
                     }
 
                     out.writeObject(responseMessage);
+                    out.flush(); // Certifica-se de que os dados são enviados imediatamente
                 }
             } catch (IOException | ClassNotFoundException e) {
                 e.printStackTrace();
             } finally {
                 try {
-                    /// Fechando o socket e os streams de I/O do cliente
+                    // Fechando o socket e os streams de I/O do cliente
                     out.close();
                     in.close();
                     clientSocket.close();
@@ -205,56 +157,65 @@ public class Server {
         }
 
         private void replicateData(String key, String value) {
-            // Send PUT request to other servers for replication
-            for (int i = 0; i < servers.length; i++) {
-                if (servers[i] == server) continue; // Skip the current server (leader)
-                try {
-                    Socket replicationSocket = new Socket(servers[i].serverIP, servers[i].serverPort);
-                    ObjectOutputStream replicationOut = new ObjectOutputStream(replicationSocket.getOutputStream());
-                    ObjectInputStream replicationIn = new ObjectInputStream(replicationSocket.getInputStream());
+            // Define os IPs e portas dos servidores para replicação
+            String[] serverIPs = {"127.0.0.1", "127.0.0.1", "127.0.0.1"};
+            int[] serverPorts = {10097, 10098, 10099};
 
-                    // Create a Message object for the replication request
-                    Mensagem requestMessage = new Mensagem("REPLICATE", key, value);
-                    replicationOut.writeObject(requestMessage);
+            // Envia a requisição PUT para os outros servidores para replicação
+            for (int i = 0; i < serverIPs.length; i++) {
+                if (!serverIPs[i].equals(serverIP) || serverPorts[i] != serverPort) {
+                    try {
+                        Socket replicateSocket = new Socket(serverIPs[i], serverPorts[i]);
+                        ObjectOutputStream replicateOut = new ObjectOutputStream(replicateSocket.getOutputStream());
 
-                    // Wait for the response from the server
-                    Mensagem responseMessage = (Mensagem) replicationIn.readObject();
-                    System.out.println("Replication response from " + servers[i].serverIP + ":" + servers[i].serverPort + ": " + responseMessage.getResponse());
+                        Mensagem replicateMessage = new Mensagem("REPLICATE", key, value);
+                        replicateOut.writeObject(replicateMessage);
+                        replicateOut.flush(); // Certifica-se de que os dados são enviados imediatamente
 
-                    replicationOut.close();
-                    replicationIn.close();
-                    replicationSocket.close();
-                } catch (IOException | ClassNotFoundException e) {
-                    e.printStackTrace();
+                        ObjectInputStream replicateIn = new ObjectInputStream(replicateSocket.getInputStream());
+                        Mensagem replicateResponse = (Mensagem) replicateIn.readObject();
+
+                        if ("REPLICATION_OK".equals(replicateResponse.response)) {
+                            System.out.println("Replication successful on server " + serverIPs[i] + ":" + serverPorts[i]);
+                        }
+
+                        replicateOut.close();
+                        replicateIn.close();
+                        replicateSocket.close();
+                    } catch (IOException | ClassNotFoundException e) {
+                        System.err.println("Error replicating data to server " + serverIPs[i] + ":" + serverPorts[i]);
+                        e.printStackTrace();
+                    }
                 }
             }
         }
 
         private String forwardPutToLeader(String key, String value) {
             try {
-                Socket leaderSocket = new Socket(servers[0].serverIP, servers[0].serverPort);
-                ObjectOutputStream leaderOut = new ObjectOutputStream(leaderSocket.getOutputStream());
-                ObjectInputStream leaderIn = new ObjectInputStream(leaderSocket.getInputStream());
+                // Envia a requisição PUT para o líder
 
-                // Create a Message object for the PUT request
+                Socket leaderSocket = new Socket("127.0.0.1", 10097);
+                ObjectOutputStream leaderOut = new ObjectOutputStream(leaderSocket.getOutputStream());
+
+
+                System.out.println("key: " + key + ", value: " + value);
                 Mensagem requestMessage = new Mensagem("PUT", key, value);
                 leaderOut.writeObject(requestMessage);
+                leaderOut.flush(); // Certifica-se de que os dados são enviados imediatamente
 
-                // Wait for the response from the leader
+                ObjectInputStream leaderIn = new ObjectInputStream(leaderSocket.getInputStream());
                 Mensagem responseMessage = (Mensagem) leaderIn.readObject();
 
                 leaderOut.close();
                 leaderIn.close();
                 leaderSocket.close();
 
-                return responseMessage.getResponse();
+                return responseMessage.response;
             } catch (IOException | ClassNotFoundException e) {
+                System.err.println("Error forwarding PUT request to leader.");
                 e.printStackTrace();
+                return "Error forwarding PUT request to leader.";
             }
-
-            return "Leader request failed";
         }
     }
 }
-
-
