@@ -1,11 +1,14 @@
 import java.io.Serializable;
+import java.time.LocalDateTime;
+
 //
 public class Mensagem implements Serializable {
     String comando;
     String key;
     String value;
     String response;
-    long timestamp;
+    LocalDateTime timestampClient;
+    LocalDateTime timestampServer;
 
     public Mensagem(String comando, String key, String value) {
         this.comando = comando;

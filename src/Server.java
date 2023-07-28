@@ -2,7 +2,6 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -13,9 +12,13 @@ public class Server {
     private boolean isLeader = false;
     private Server[] servers; // Array para armazenar todas as instâncias dos servidores
 
-    private Map<String, String> keyValueStore = new HashMap<>();
+    //private Map<String, String> keyValueStore = new HashMap<>();
+    private static HashMap<String, ValueTime> keyValueStore = new HashMap<>();
+    private long timestamp_sys = System.currentTimeMillis();
 
     public static void main(String[] args) {
+        ValueTime teste = new ValueTime("teste", 999999999);
+        keyValueStore.put("teste-chave", teste);
         Scanner scanner = new Scanner(System.in);
         System.out.print("Digite o IP do Server: ");
         String serverIP = scanner.nextLine();
@@ -29,6 +32,7 @@ public class Server {
         scanner.close();
     }
 
+
     public Server(String serverIP, int serverPort, Server[] servers) {
         this.serverIP = serverIP;
         this.serverPort = serverPort;
@@ -40,6 +44,15 @@ public class Server {
         }
     }
 
+    private static class ValueTime {
+        public String value;
+        public long timestamp;
+
+        public ValueTime(String value, long timestamp) {
+            this.value = value;
+            this.timestamp = timestamp;
+        }
+    }
     private void start() {
         try {
             ServerSocket serverSocket = new ServerSocket(serverPort);
@@ -59,12 +72,27 @@ public class Server {
         }
     }
 
-    private synchronized void put(String key, String value) {
-        keyValueStore.put(key, value);
+    private synchronized ValueTime put(String key, String value) {
+        ValueTime value_time = new ValueTime(key, timestamp_sys);
+        keyValueStore.put(key, value_time);
+        return value_time;
     }
 
-    private synchronized String get(String key) {
-        return keyValueStore.get(key);
+    private synchronized ValueTime get(String key) {
+        ValueTime value = keyValueStore.get(key);
+        if (value == null){
+            return value;
+        }
+        else{
+            if (value.timestamp >= timestamp_sys){
+                return value;
+            }
+            else{
+                ValueTime response = new ValueTime("TRY_OTHER_SERVER_OR_LATER", timestamp_sys);
+                return response;
+            }
+        }
+
     }
 
     private class ClientHandler implements Runnable {
@@ -100,19 +128,21 @@ public class Server {
 
                         if (server.isLeader) {
                             System.out.println("Cliente " + clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort() + " PUT key:" + key + " value:" + value);
-                            put(key, value);
-                            response = "PUT_OK key: " + key + " value:" + value + " realizada no servidor " + server.serverIP + ":" + server.serverPort;
-                            replicateData(key, value);
+                            ValueTime value_time = put(key, value);
+                            replicateData(key, value, value_time);
                         } else {
                             System.out.println("Encaminhando PUT key:" + key + " value:" + value);
                             String leaderResponse = forwardPutToLeader(key, value);
-                            response = "PUT_OK key: " + key + " value:" + value + " encaminhado para o líder. Resposta do líder: " + leaderResponse;
                         }
+                        response = "PUT_OK key: " + key + " value:" + value + " realizada no servidor " + server.serverIP + ":" + "10097";
+
                     } else if (requestMessage.comando.equals("GET")) {
                         String key = requestMessage.key;
-                        String value = get(key);
-                        response = (value != null) ? "GET key: " + key + " value: " + value + " obtido do servidor " + server.serverIP + ":" + server.serverPort : "Key not found";
-                        System.out.println("Cliente " + clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort() + " GET key:"+key+" ts:[timestamp]. Meu ts é [timestamp_da_key], portanto devolvendo [valor ou erro]");
+                        ValueTime value = get(key);
+                        response = (value != null) ? "GET key: " + key + " value: " + value.value + " obtido do servidor " + server.serverIP + ":" + server.serverPort +" meu timestamp"+ timestamp_sys +" e do servidor "+ value.timestamp : "NULL";
+                        if(value != null ){
+                            System.out.println("Cliente " + clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort() + " GET key:"+key+" ts:"+ timestamp_sys +". Meu ts é "+ value.timestamp +", portanto devolvendo "+ value.value);
+                        }
                     } else if (requestMessage.comando.equals("REPLICATE")) {
                         String key = requestMessage.key;
                         String value = requestMessage.value;
@@ -126,10 +156,10 @@ public class Server {
                     // Create a Message object for the response
                     Mensagem responseMessage = new Mensagem(response);
 
-                    if (response.equals("PUT_OK key: " + requestMessage.key + " value:" + requestMessage.value + " encaminhado para o líder. Resposta do líder: REPLICATION_OK")) {
+                    //if (response.equals("PUT_OK key: " + requestMessage.key + " value:" + requestMessage.value + " encaminhado para o líder. Resposta do líder: REPLICATION_OK")) {
                         // Send an empty response to the client after forwarding the PUT request
-                        responseMessage = new Mensagem("");
-                    }
+                    //    responseMessage = new Mensagem("");
+                    //}
 
                     out.writeObject(responseMessage);
                     out.flush(); // Certifica-se de que os dados são enviados imediatamente
@@ -157,7 +187,7 @@ public class Server {
             }
         }
 
-        private void replicateData(String key, String value) {
+        private void replicateData(String key, String value, ValueTime valuet) {
             // Define os IPs e portas dos servidores para replicação
             String[] serverIPs = {"127.0.0.1", "127.0.0.1", "127.0.0.1"};
             int[] serverPorts = {10097, 10098, 10099};
@@ -187,7 +217,7 @@ public class Server {
 
                 }
             }
-            System.out.println("Enviando PUT_OK ao Cliente " + clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort() + " da key:"+ key +" ts:[timestamp_do_servidor]");
+            System.out.println("Enviando PUT_OK ao Cliente " + clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort() + " da key:"+ key +" ts:" + valuet.timestamp);
         }
 
         private String forwardPutToLeader(String key, String value) {
